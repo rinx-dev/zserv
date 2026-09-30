@@ -59,7 +59,7 @@ cd npm
 npm publish --access public
 ```
 
-`npm publish` first runs `scripts/fetch-checksums.js`, which records the SHA-256 of every release archive in `checksums.json` so the launcher can verify its download. It fails (and nothing is published) if any `.sha256` file is missing from the release.
+`npm publish` first runs `scripts/fetch-checksums.js`, which records the SHA-256 of every release archive in `checksums.json` so the launcher can verify its download. It fails (and nothing is published) if any `.sha256` file is missing from the release. Packing also converts the launcher files to LF line endings (`scripts/normalize-eol.js`), so publishing from a Windows checkout is safe.
 
 ### 5. Publish to Crates.io
 

@@ -111,3 +111,23 @@ test("launcher reports a binary that cannot start", launcherTest, () => {
     assert.match(result.stderr, /zserv: could not run /);
   });
 });
+
+test("packing converts CRLF line endings to LF", () => {
+  const pkg = tempDir();
+  const files = [];
+  for (const dir of ["bin", "lib"]) {
+    fs.cpSync(path.join(__dirname, "..", dir), path.join(pkg, dir), { recursive: true });
+    for (const name of fs.readdirSync(path.join(pkg, dir)).filter((n) => n.endsWith(".js"))) {
+      files.push(path.join(pkg, dir, name));
+    }
+  }
+  // What a Windows checkout with git's core.autocrlf produces
+  for (const file of files) {
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/\r?\n/g, "\r\n"));
+  }
+
+  execFileSync(process.execPath, [path.join(__dirname, "..", "scripts", "normalize-eol.js"), pkg]);
+
+  for (const file of files) assert.ok(!fs.readFileSync(file, "utf8").includes("\r"), file);
+  assert.ok(fs.readFileSync(path.join(pkg, "bin", "zserv.js"), "utf8").startsWith("#!/usr/bin/env node\n"));
+});

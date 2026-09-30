@@ -1,0 +1,4 @@
+# Check out every text file with LF line endings, Windows included. The npm launcher's
+# "#!/usr/bin/env node" line must end in LF: with CRLF, Linux and macOS look for a
+# program called "node\r" and the zserv command fails.
+* text=auto eol=lf

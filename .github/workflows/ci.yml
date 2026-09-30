@@ -67,3 +67,14 @@ jobs:
 
       - name: Test
         run: npm test
+
+      # A CRLF "#!/usr/bin/env node" line breaks the zserv command on Linux and macOS
+      - name: Check the packed launcher has LF line endings
+        shell: bash
+        run: |
+          npm pack --silent
+          tar -xzf zserv-*.tgz
+          if grep -rl $'\r' package/bin package/lib; then
+            echo "::error::CRLF line endings in the npm package"
+            exit 1
+          fi
