@@ -1,20 +1,17 @@
 use crate::cli::Config;
+use crate::server::REQUEST_TIMEOUT;
 use colored::Colorize;
 use local_ip_address::list_afinet_netifas;
 use std::net::SocketAddr;
+use std::path::Path;
 
-pub fn print_banner(config: &Config, addr: SocketAddr) {
+pub fn print_banner(config: &Config, root: &Path, addr: SocketAddr) {
     let app_name = env!("CARGO_PKG_NAME").yellow();
     let version = env!("CARGO_PKG_VERSION");
 
-    // Resolve display path
-    let canonical_path = std::fs::canonicalize(&config.path).unwrap_or(config.path.clone());
-    let path_str = canonical_path.to_string_lossy();
-    let display_path = if path_str.starts_with(r"\\?\") {
-        &path_str[4..]
-    } else {
-        &path_str
-    };
+    // canonicalize() returns verbatim paths (\\?\C:\...) on Windows; show the familiar form
+    let root = root.to_string_lossy();
+    let display_path = root.strip_prefix(r"\\?\").unwrap_or(&root);
 
     println!("Starting up {}, serving {}", app_name, display_path.cyan());
     println!();
@@ -29,13 +26,24 @@ pub fn print_banner(config: &Config, addr: SocketAddr) {
             "disabled".red()
         }
     );
+    println!(
+        "Hidden Files: {}",
+        if config.hidden {
+            "visible".yellow()
+        } else {
+            "hidden".green()
+        }
+    );
     println!("Cache: {}", "disabled".red());
-    println!("Connection Timeout: {}", "120 seconds".bright_white());
+    println!(
+        "Compression: {}",
+        "gzip, br, zstd (text files)".bright_white()
+    );
+    println!(
+        "Request Timeout: {}",
+        format!("{} seconds", REQUEST_TIMEOUT.as_secs()).bright_white()
+    );
     println!("Directory Listings: {}", "visible".green());
-    println!("AutoIndex: {}", "visible".green());
-    println!("Serve GZIP Files: {}", "true".green());
-    println!("Serve Brotli Files: {}", "true".green());
-    println!("Default File Extension: {}", "none".bright_white());
     println!();
     println!("Available on:");
 

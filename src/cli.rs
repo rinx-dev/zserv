@@ -3,9 +3,9 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug, Clone)]
-#[command(author, version, about = "zserv: A simple, robust HTTP server in Rust", long_about = None)]
+#[command(author, version, about = "zserv: A simple, lightweight HTTP file server", long_about = None)]
 pub struct Config {
-    /// Port to listen on
+    /// Port to listen on (0 picks a free port)
     #[arg(short, long, default_value_t = 8080)]
     pub port: u16,
 
@@ -20,6 +20,10 @@ pub struct Config {
     /// Enable CORS headers
     #[arg(long, default_value_t = false)]
     pub cors: bool,
+
+    /// List and serve hidden files (names starting with '.')
+    #[arg(long, default_value_t = false)]
+    pub hidden: bool,
 
     /// Suppress log output
     #[arg(short, long, default_value_t = false)]
