@@ -17,10 +17,13 @@ async function main() {
   for (const archive of archives) {
     const url = releaseUrl(version, `${archive}.sha256`);
     const response = await fetch(url);
+    // Read the body even on errors: GitHub's 404 page is gzip-encoded and still being
+    // decompressed otherwise
+    const body = await response.text();
     if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
 
     // sha256sum format: "<hex>  <file name>"
-    const [hash] = (await response.text()).trim().split(/\s+/);
+    const [hash] = body.trim().split(/\s+/);
     if (!/^[0-9a-f]{64}$/i.test(hash)) throw new Error(`unexpected checksum format in ${url}`);
     checksums[archive] = hash.toLowerCase();
   }
@@ -30,7 +33,9 @@ async function main() {
   console.log(`Recorded ${archives.length} checksums for v${version} in checksums.json`);
 }
 
+// Set the exit code instead of calling process.exit(): exiting while network I/O is still
+// settling crashes Node on Windows ("Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)").
 main().catch((err) => {
   console.error(`fetch-checksums: ${err.message}`);
-  process.exit(1);
+  process.exitCode = 1;
 });
