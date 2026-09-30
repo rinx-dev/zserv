@@ -5,6 +5,14 @@
   "bin": {
     "zserv": "bin/zserv.js"
   },
+  "files": [
+    "bin/zserv.js",
+    "lib/",
+    "checksums.json"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "os": [
     "darwin",
     "linux",
@@ -15,7 +23,8 @@
     "arm64"
   ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "prepublishOnly": "node scripts/fetch-checksums.js",
+    "test": "node --test"
   },
   "repository": {
     "type": "git",
@@ -33,9 +42,5 @@
   "bugs": {
     "url": "https://github.com/rinx-dev/zserv/issues"
   },
-  "homepage": "https://github.com/rinx-dev/zserv#readme",
-  "dependencies": {
-    "tar": "^7.4.3",
-    "adm-zip": "^0.5.16"
-  }
+  "homepage": "https://github.com/rinx-dev/zserv#readme"
 }
