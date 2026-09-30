@@ -11,11 +11,13 @@
 ## Features
 
 - 🚀 **Fast & Lightweight**: Built with Rust and Axum for high performance.
-- 📂 **Directory Listing**: Beautiful HTML directory listing with file icons and sizes.
-- 🌐 **Modern**: Supports HTTP/2.
-- 🔧 **Configurable**: Easy CLI options for port, binding address, and CORS.
+- 📂 **Directory Listing**: Clean HTML directory listing with file icons and sizes, and a dark mode.
+- 🔒 **Safe Defaults**: Hidden files like `.env` and `.git/` are neither listed nor served unless you pass `--hidden`.
+- 🔄 **Always Fresh**: Responses are sent with `Cache-Control: no-cache`, so a reload always shows your latest edits.
+- 🗜️ **Compression**: Text files are compressed with gzip, Brotli, or zstd. Archives and media are sent as-is, so downloads keep their size and progress bar.
+- 🔧 **Configurable**: Easy CLI options for port, binding address, CORS, and hidden files.
 - 🔇 **Quiet Mode**: Suppress logs with a simple flag.
-- 📦 **Cross-Platform**: Binaries available for Linux, macOS, and Windows.
+- 📦 **Cross-Platform**: Binaries for Linux (x64/arm64, statically linked), macOS (x64/arm64), and Windows (x64).
 
 ## Quick Start
 
@@ -73,6 +75,10 @@ If you want to contribute or run from source without installing:
 git clone https://github.com/rinx-dev/zserv.git
 cd zserv
 cargo run
+
+# Run the tests (Rust server, then the npm launcher)
+cargo test
+cd npm && npm test
 ```
 
 ## Usage
@@ -92,9 +98,14 @@ zserv -p 3000
 # Enable CORS headers
 zserv --cors
 
+# Also list and serve dotfiles (hidden by default)
+zserv --hidden
+
 # Listen on localhost only
 zserv -a 127.0.0.1
 ```
+
+By default zserv listens on all network interfaces (`0.0.0.0`), so other devices on your network can reach it. Use `-a 127.0.0.1` to keep it on your machine.
 
 ### Options
 
@@ -105,9 +116,10 @@ Arguments:
   [PATH]  Directory to serve [default: .]
 
 Options:
-  -p, --port <PORT>        Port to listen on [default: 8080]
+  -p, --port <PORT>        Port to listen on (0 picks a free port) [default: 8080]
   -a, --address <ADDRESS>  Address to bind to [default: 0.0.0.0]
       --cors               Enable CORS headers
+      --hidden             List and serve hidden files (names starting with '.')
   -s, --silent             Suppress log output
   -h, --help               Print help
   -V, --version            Print version
