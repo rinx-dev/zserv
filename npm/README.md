@@ -51,6 +51,9 @@ zserv -p 3000
 # Enable CORS headers
 zserv --cors
 
+# Also list and serve dotfiles (hidden by default)
+zserv --hidden
+
 # Listen on localhost only
 zserv -a 127.0.0.1
 ```
@@ -64,9 +67,10 @@ Arguments:
   [PATH]  Directory to serve [default: .]
 
 Options:
-  -p, --port <PORT>        Port to listen on [default: 8080]
+  -p, --port <PORT>        Port to listen on (0 picks a free port) [default: 8080]
   -a, --address <ADDRESS>  Address to bind to [default: 0.0.0.0]
       --cors               Enable CORS headers
+      --hidden             List and serve hidden files (names starting with '.')
   -s, --silent             Suppress log output
   -h, --help               Print help
   -V, --version            Print version
@@ -74,6 +78,8 @@ Options:
 
 ## About
 
-This NPM package provides a wrapper that automatically downloads and runs the appropriate binary for your platform. The actual implementation is written in Rust and is also available on [crates.io](https://crates.io/crates/zserv).
+This package is a small launcher with no dependencies. On first run it downloads the prebuilt binary for your platform from the matching [GitHub release](https://github.com/rinx-dev/zserv/releases), verifies its SHA-256 checksum, and caches it (next to the package, or in your user cache directory if that is read-only). The server itself is written in Rust and is also available on [crates.io](https://crates.io/crates/zserv).
+
+Prebuilt binaries: Linux x64/arm64 (static, so Alpine works too), macOS x64/arm64, Windows x64 (also used on Windows on Arm). Requires Node.js 18 or newer.
 
 For more information, visit the [GitHub repository](https://github.com/rinx-dev/zserv).

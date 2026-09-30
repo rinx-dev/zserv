@@ -1,154 +1,119 @@
 #!/usr/bin/env node
+"use strict";
 
-const fs = require("fs");
-const path = require("path");
-const https = require("https");
-const { execFileSync } = require("child_process");
-const AdmZip = require("adm-zip"); // For Windows zip
-const tar = require("tar"); // For Unix tar.gz
+// Launcher for the zserv binary. On first run it downloads the prebuilt binary for this
+// platform from the matching GitHub release, then runs it with the same arguments.
 
-// Get version from package.json
-const pkg = require("../package.json");
-const VERSION = pkg.version;
-const REPO = "rinx-dev/zserv"; // Must match GitHub repo
+const crypto = require("node:crypto");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
+const { BINARIES, archiveName, releaseUrl, extractBinary } = require("../lib/release.js");
+const { version } = require("../package.json");
 
-// Determine platform and arch
-const platform = process.platform;
-const arch = process.arch;
+const platform = `${process.platform}-${process.arch}`;
+const binary = BINARIES[platform];
 
-// Determine binary name based on platform and arch
-let BIN_NAME;
-if (platform === "win32") {
-  BIN_NAME = "zserv-windows-amd64.exe";
-} else if (platform === "darwin") {
-  BIN_NAME = arch === "arm64" ? "zserv-macos-arm64" : "zserv-macos-amd64";
-} else {
-  BIN_NAME = "zserv-linux-amd64";
-}
+main().catch((err) => fail(err.message));
 
-let assetName = "";
-
-if (platform === "win32") {
-  if (arch === "x64") {
-    assetName = "zserv-windows-amd64.exe.zip";
-  } else {
-    console.error(`Unsupported architecture: ${arch} on Windows`);
-    process.exit(1);
-  }
-} else if (platform === "darwin") {
-  if (arch === "x64") {
-    assetName = "zserv-macos-amd64.tar.gz";
-  } else if (arch === "arm64") {
-    assetName = "zserv-macos-arm64.tar.gz";
-  } else {
-    console.error(`Unsupported architecture: ${arch} on macOS`);
-    process.exit(1);
-  }
-} else if (platform === "linux") {
-  if (arch === "x64") {
-    assetName = "zserv-linux-amd64.tar.gz";
-  } else {
-    console.error(`Unsupported architecture: ${arch} on Linux`);
-    process.exit(1);
-  }
-} else {
-  console.error(`Unsupported platform: ${platform}`);
-  process.exit(1);
-}
-
-const downloadUrl = `https://github.com/${REPO}/releases/download/v${VERSION}/${assetName}`;
-const binPath = path.join(__dirname, BIN_NAME);
-
-// Check if binary already exists
-if (fs.existsSync(binPath)) {
-  runBinary();
-} else {
-  console.log(`Downloading zserv ${VERSION} for ${platform}-${arch}...`);
-  downloadAndExtract();
-}
-
-function downloadAndExtract() {
-  const tempFile = path.join(__dirname, assetName);
-  const file = fs.createWriteStream(tempFile);
-
-  https
-    .get(downloadUrl, (response) => {
-      if (response.statusCode === 302 || response.statusCode === 301) {
-        // Follow redirect
-        https.get(response.headers.location, (redirectResponse) => {
-          handleDownload(redirectResponse, file, tempFile);
-        });
-      } else {
-        handleDownload(response, file, tempFile);
-      }
-    })
-    .on("error", (err) => {
-      console.error(`Error downloading binary: ${err.message}`);
-      process.exit(1);
-    });
-}
-
-function handleDownload(response, file, tempFile) {
-  if (response.statusCode !== 200) {
-    console.error(`Failed to download binary: HTTP ${response.statusCode}`);
-    console.error(`URL: ${downloadUrl}`);
-    process.exit(1);
+async function main() {
+  if (!binary) {
+    fail(`no prebuilt binary for ${platform}; install from source with \`cargo install zserv\``);
   }
 
-  response.pipe(file);
-
-  file.on("finish", () => {
-    file.close(() => {
-      extract(tempFile);
-    });
-  });
+  // Prefer the package directory; fall back to a per-user cache when it is read-only
+  // (for example a global install owned by root).
+  const locations = [path.join(__dirname, binary), path.join(cacheDir(), version, binary)];
+  const installed = locations.find((location) => fs.existsSync(location));
+  run(installed ?? (await install(locations)));
 }
 
-function extract(tempFile) {
-  console.log("Extracting...");
+async function install(locations) {
+  if (typeof fetch !== "function") fail("Node.js 18 or newer is required");
 
-  if (assetName.endsWith(".zip")) {
-    const zip = new AdmZip(tempFile);
-    zip.extractAllTo(__dirname, true);
-    fs.unlinkSync(tempFile);
-    runBinary();
-  } else {
-    tar
-      .x({
-        file: tempFile,
-        cwd: __dirname,
-      })
-      .then(() => {
-        fs.unlinkSync(tempFile);
-        runBinary();
-      })
-      .catch((err) => {
-        console.error("Error extracting tarball:", err);
-        process.exit(1);
-      });
-  }
-}
+  const archive = archiveName(binary);
+  const url = releaseUrl(version, archive);
+  process.stderr.write(`Downloading zserv ${version} for ${platform}...\n`);
 
-function runBinary() {
-  // Ensure executable permissions on Unix
-  if (platform !== "win32") {
-    try {
-      fs.chmodSync(binPath, "755");
-    } catch (e) {
-      // Ignore if fail
-    }
-  }
-
+  let response;
   try {
-    // Pass all arguments to the binary
-    const args = process.argv.slice(2);
-    execFileSync(binPath, args, { stdio: "inherit" });
-  } catch (e) {
-    // execFileSync throws if command fails, but stdio: inherit handles output.
-    // We just exit with the same code if available.
-    if (e.status) {
-      process.exit(e.status);
-    }
-    process.exit(1);
+    response = await fetch(url);
+  } catch (err) {
+    throw new Error(`download failed: ${err.cause?.message ?? err.message}${proxyHint()}\n  ${url}`);
   }
+  if (!response.ok) throw new Error(`download failed: HTTP ${response.status}\n  ${url}`);
+
+  const data = Buffer.from(await response.arrayBuffer());
+  verifyChecksum(archive, data);
+  const executable = extractBinary(data, archive, binary);
+
+  let lastError;
+  for (const location of locations) {
+    try {
+      writeExecutable(location, executable);
+      return location;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw new Error(`could not save the zserv binary: ${lastError.message}`);
+}
+
+function verifyChecksum(archive, data) {
+  // checksums.json is written when the package is published (scripts/fetch-checksums.js);
+  // it is absent when running from a git checkout.
+  const file = path.join(__dirname, "..", "checksums.json");
+  if (!fs.existsSync(file)) return;
+
+  const expected = JSON.parse(fs.readFileSync(file, "utf8"))[archive];
+  const actual = crypto.createHash("sha256").update(data).digest("hex");
+  if (actual !== expected) {
+    throw new Error(
+      `checksum mismatch for ${archive}: expected ${expected ?? "(none recorded)"}, got ${actual}`,
+    );
+  }
+}
+
+function writeExecutable(location, data) {
+  fs.mkdirSync(path.dirname(location), { recursive: true });
+  // Write to a temporary name and rename, so an interrupted run never leaves a truncated binary
+  const tmp = `${location}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(tmp, data, { mode: 0o755 });
+    fs.renameSync(tmp, location);
+  } catch (err) {
+    fs.rmSync(tmp, { force: true });
+    // Another zserv process may have just installed it (renaming over a running .exe fails)
+    if (!fs.existsSync(location)) throw err;
+  }
+}
+
+function run(binPath) {
+  const result = spawnSync(binPath, process.argv.slice(2), { stdio: "inherit" });
+  if (result.error) fail(`could not run ${binPath}: ${result.error.message}`);
+  // Exit the way the binary did, so shells and scripts see the same status
+  if (result.signal) process.kill(process.pid, result.signal);
+  process.exit(result.status ?? 1);
+}
+
+function cacheDir() {
+  const home = os.homedir();
+  if (process.platform === "win32") {
+    return path.join(process.env.LOCALAPPDATA || path.join(home, "AppData", "Local"), "zserv");
+  }
+  if (process.platform === "darwin") return path.join(home, "Library", "Caches", "zserv");
+  return path.join(process.env.XDG_CACHE_HOME || path.join(home, ".cache"), "zserv");
+}
+
+function proxyHint() {
+  const proxy = process.env.HTTPS_PROXY || process.env.https_proxy;
+  return proxy && !process.env.NODE_USE_ENV_PROXY
+    ? " (behind a proxy? set NODE_USE_ENV_PROXY=1 so Node.js uses it)"
+    : "";
+}
+
+function fail(message) {
+  console.error(`zserv: ${message}`);
+  process.exit(1);
 }
