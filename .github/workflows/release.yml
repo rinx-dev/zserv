@@ -4,6 +4,13 @@ on:
   push:
     tags:
       - "v*"
+  # Dry run for pull requests that could break a release build: every build and
+  # packaging step runs, but no release is created and nothing is uploaded.
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
 
 permissions:
   contents: write
@@ -14,6 +21,7 @@ env:
 jobs:
   create-release:
     name: Create Release
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -27,6 +35,8 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     needs: create-release
+    # Also run when create-release was skipped (pull request dry run)
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -105,6 +115,7 @@ jobs:
           fi
 
       - name: Upload Release Assets
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
           fail_on_unmatched_files: true
