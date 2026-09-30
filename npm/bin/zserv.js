@@ -15,11 +15,18 @@ const { version } = require("../package.json");
 const platform = `${process.platform}-${process.arch}`;
 const binary = BINARIES[platform];
 
-main().catch((err) => fail(err.message));
+// Errors set the exit code instead of calling process.exit(): exiting while network I/O is
+// still settling crashes Node on Windows ("Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)").
+main().catch((err) => {
+  console.error(`zserv: ${err.message}`);
+  process.exitCode = 1;
+});
 
 async function main() {
   if (!binary) {
-    fail(`no prebuilt binary for ${platform}; install from source with \`cargo install zserv\``);
+    throw new Error(
+      `no prebuilt binary for ${platform}; install from source with \`cargo install zserv\``,
+    );
   }
 
   // Prefer the package directory; fall back to a per-user cache when it is read-only
@@ -30,7 +37,7 @@ async function main() {
 }
 
 async function install(locations) {
-  if (typeof fetch !== "function") fail("Node.js 18 or newer is required");
+  if (typeof fetch !== "function") throw new Error("Node.js 18 or newer is required");
 
   const archive = archiveName(binary);
   const url = releaseUrl(version, archive);
@@ -42,7 +49,11 @@ async function install(locations) {
   } catch (err) {
     throw new Error(`download failed: ${err.cause?.message ?? err.message}${proxyHint()}\n  ${url}`);
   }
-  if (!response.ok) throw new Error(`download failed: HTTP ${response.status}\n  ${url}`);
+  if (!response.ok) {
+    // Finish reading the (gzip-encoded) error page before exiting
+    await response.arrayBuffer().catch(() => {});
+    throw new Error(`download failed: HTTP ${response.status}\n  ${url}`);
+  }
 
   const data = Buffer.from(await response.arrayBuffer());
   verifyChecksum(archive, data);
@@ -91,10 +102,10 @@ function writeExecutable(location, data) {
 
 function run(binPath) {
   const result = spawnSync(binPath, process.argv.slice(2), { stdio: "inherit" });
-  if (result.error) fail(`could not run ${binPath}: ${result.error.message}`);
+  if (result.error) throw new Error(`could not run ${binPath}: ${result.error.message}`);
   // Exit the way the binary did, so shells and scripts see the same status
   if (result.signal) process.kill(process.pid, result.signal);
-  process.exit(result.status ?? 1);
+  process.exitCode = result.status ?? 1;
 }
 
 function cacheDir() {
@@ -111,9 +122,4 @@ function proxyHint() {
   return proxy && !process.env.NODE_USE_ENV_PROXY
     ? " (behind a proxy? set NODE_USE_ENV_PROXY=1 so Node.js uses it)"
     : "";
-}
-
-function fail(message) {
-  console.error(`zserv: ${message}`);
-  process.exit(1);
 }

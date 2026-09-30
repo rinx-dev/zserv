@@ -44,13 +44,17 @@ jobs:
         run: cargo test --locked
 
   npm:
-    name: npm launcher (Node ${{ matrix.node }})
-    runs-on: ubuntu-latest
+    name: npm launcher (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        # 18 is the minimum in npm/package.json "engines"
-        node: ["18", "lts/*"]
+        include:
+          # 18 is the minimum in npm/package.json "engines"
+          - { os: ubuntu-latest, node: "18" }
+          - { os: ubuntu-latest, node: "lts/*" }
+          - { os: macos-latest, node: "lts/*" }
+          - { os: windows-latest, node: "lts/*" }
     defaults:
       run:
         working-directory: npm
@@ -63,3 +67,14 @@ jobs:
 
       - name: Test
         run: npm test
+
+      # A CRLF "#!/usr/bin/env node" line breaks the zserv command on Linux and macOS
+      - name: Check the packed launcher has LF line endings
+        shell: bash
+        run: |
+          npm pack --silent
+          tar -xzf zserv-*.tgz
+          if grep -rl $'\r' package/bin package/lib; then
+            echo "::error::CRLF line endings in the npm package"
+            exit 1
+          fi

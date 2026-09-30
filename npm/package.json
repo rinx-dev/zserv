@@ -1,6 +1,6 @@
 {
   "name": "zserv",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A simple, lightweight, and modern HTTP file server.",
   "bin": {
     "zserv": "bin/zserv.js"
@@ -23,6 +23,7 @@
     "arm64"
   ],
   "scripts": {
+    "prepack": "node scripts/normalize-eol.js",
     "prepublishOnly": "node scripts/fetch-checksums.js",
     "test": "node --test"
   },
